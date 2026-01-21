@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+dist/
+build/
+
+# Misc
+.DS_Store
+*.pem
+
+# Env / Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+build_log.txt
+build_log_cmd.txt
+build_log_dashboards.txt
+output.txt
+
+# Local artifacts
+SMA.zip
+*.log
+.gemini/
