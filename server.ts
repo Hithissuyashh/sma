@@ -3,15 +3,26 @@ import cors from 'cors';
 import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 // Config
 dotenv.config();
 const app = express();
 const PORT = 3001;
+app.use(helmet());
+
 
 // Middleware
-app.use(cors());
+app.use(cors({   origin: ["https://your-vercel-app.vercel.app"],   methods: ["GET", "POST"],   credentials: true }));
 app.use(express.json());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+
+app.use(limiter);
 
 // Health check route
 app.get('/', (req: Request, res: Response) => {
@@ -19,7 +30,7 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // API: Delete Society and ALL linked users
-app.post('/api/delete-society', async (req: Request, res: Response) => {
+app.post('/api/delete-society', verifyAdmin, async(req: Request, res: Response) => {
     const { societyId } = req.body;
 
     if (!societyId) {
@@ -60,7 +71,7 @@ app.post('/api/delete-society', async (req: Request, res: Response) => {
 });
 
 // API: Delete User (Auth and Database)
-app.post('/api/delete-user', async (req: Request, res: Response) => {
+app.post('/api/delete-user', verifyAdmin, async (req: Request, res: Response) => {
     const { userId, email, role } = req.body;
 
     if (!userId) {
@@ -98,7 +109,7 @@ app.post('/api/delete-user', async (req: Request, res: Response) => {
 });
 
 // Initialize Resend
-const resend = new Resend(process.env.VITE_RESEND_API_KEY);
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Initialize Supabase Admin Client (uses service role key for admin operations)
 const supabaseAdmin = createClient(
@@ -106,9 +117,34 @@ const supabaseAdmin = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || '', // This is the service role key, NOT the anon key
     { auth: { autoRefreshToken: false, persistSession: false } }
 );
+const verifyAdmin = async (req: Request, res: Response, next: any) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: No token" });
+  }
+
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+
+  if (error || !user) {
+    return res.status(401).json({ error: "Unauthorized: Invalid token" });
+  }
+
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") {
+    return res.status(403).json({ error: "Forbidden: Admins only" });
+  }
+
+  next();
+};
 
 // API: Create Admin User on Society Approval
-app.post('/api/create-admin', async (req: Request, res: Response) => {
+app.post('/api/create-admin', verifyAdmin, async (req: Request, res: Response) => {
     const { email, password, adminName, societyId } = req.body;
 
     if (!email || !password || !adminName || !societyId) {
@@ -118,7 +154,7 @@ app.post('/api/create-admin', async (req: Request, res: Response) => {
     const cleanPassword = password.toString().trim();
 
     try {
-        console.log(`Creating Admin: ${email} with password: ${cleanPassword}`);
+       console.log(`Creating Admin: ${email}`);
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password: cleanPassword,
